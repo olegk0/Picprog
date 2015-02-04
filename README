@@ -1,0 +1,39 @@
+This is Picprog, a Microchip PIC microcontroller programmer software
+for the simple serial port device.
+Copyright © 1997,2002,2003,2004,2005,2006,2007,2010 Jaakko Hyvätti.
+It may also work for serial eeproms and such with modifications.
+
+
+What you need:
+
+	Serial port pic programming hardware,
+	g++ compiler,
+	Linux kernel version 2.0.32 or 2.1.45 or later
+	..or Cygwin DLL version 1.5.8 or later
+	A pic assembler, for example gpasm.
+
+Quick installation instructions:
+
+	make dep
+	make
+	make install
+
+To program for example a pic16f84 chip:
+
+	picprog --burn --device=pic16f84 --input something.hex --pic /dev/ttyS1
+
+Includes a tool to test PC serial port: testport
+
+Full manual:
+
+	see the file picprog.html in this directory
+	or <URL:http://www.iki.fi/hyvatti/pic/picprog.html>
+
+The author may be contacted at:
+
+	Email: Jaakko.Hyvatti@iki.fi
+	URL:   http://www.iki.fi/hyvatti/
+
+Remember: this is not a production quality programmer!  See the
+data sheets from Microchip for more information about what
+that means.
