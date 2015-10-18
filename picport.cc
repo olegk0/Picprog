@@ -171,9 +171,9 @@ int picport::stk500v2_command( unsigned char * buf,size_t len, size_t maxlen)
   int tries = 0;
   int status;
 
-  DEBUG("STK500V2: stk500v2_command(");
-  for (i=0;i<len;i++) DEBUG("0x%02x ",buf[i]);
-  DEBUG(", %d)\n",len);
+  PDEBUGS("STK500V2: command(");
+  for (i=0;i<len;i++) PDEBUGS("0x%02x ",buf[i]);
+  PDEBUGS(", %d)\n",len);
 
 retry:
   tries++;
@@ -185,10 +185,10 @@ retry:
 
   // if we got a successful readback, return
   if (status > 0) {
-    DEBUG(" = %d\n",status);
+    PDEBUG(" = %d",status);
     if (status < 2) {
       fprintf(stderr, "stk500v2_command(): short reply\n");
-      return -1;
+      return ERR(ERROR_RCV);
     }
 /*    if (buf[0] == CMD_XPROG_SETMODE || buf[0] == CMD_XPROG) {
 
@@ -251,11 +251,11 @@ retry:
         } else if (buf[1] == STATUS_CMD_FAILED) {
             fprintf(stderr,"stk500v2_command(): command failed\n");
         } else if (buf[1] == STATUS_CMD_UNKNOWN) {
-            fprintf(stderr,"stk500v2_command(): unknown command\n");
+            fprintf(stderr,"stk500v2_command(): unknown command:0x%02x\n",buf[2]);
         } else {
             fprintf(stderr, "stk500v2_command(): unknown status 0x%02x\n", buf[1]);
         }
-        return -1;
+        return ERR(ERROR_RCV);
     }
   }
 
@@ -269,8 +269,8 @@ retry:
       goto retry;
   }
 
-  DEBUG(" = 0\n");
-  return 0;
+  PDEBUG(" = 0");
+  return NO_ERROR;
 }
 //***************************************************************************
 int picport::stk500v2_send( unsigned char * data, size_t len)
@@ -290,9 +290,9 @@ int picport::stk500v2_send( unsigned char * data, size_t len)
   for (i=0;i<5+len;i++)
     buf[5+len] ^= buf[i];
 
-  DEBUG("STK500V2: stk500v2_send(");
-  for (i=0;i<len+6;i++) DEBUG("0x%02x ",buf[i]);
-  DEBUG(", %d)\n",len+6);
+  PDEBUGS("STK500V2: send(");
+  for (i=0;i<len+6;i++) PDEBUGS("0x%02x ",buf[i]);
+  PDEBUGS(", %d)\n",len+6);
 
   if (HwPort.avrdoper_send(buf, len+6) != 0) {
     fprintf(stderr,"stk500_send(): failed to send command to serial port\n");
@@ -316,7 +316,7 @@ int picport::stk500v2_recv( unsigned char *msg, size_t maxsize) {
   double tstart, tnow;
 
 
-  DEBUG("STK500V2: stk500v2_recv(): ");
+  PDEBUGS("STK500V2: recv:");
 
   gettimeofday(&tv, NULL);
   tstart = tv.tv_sec;
@@ -324,84 +324,89 @@ int picport::stk500v2_recv( unsigned char *msg, size_t maxsize) {
   while ( (state != sDONE ) && (!timeout) ) {
     if (HwPort.avrdoper_recv(&c, 1) < 0)
       goto timedout;
-    DEBUG("0x%02x ",c);
+    PDEBUGS("0x%02x ",c);
     checksum ^= c;
 
     switch (state) {
       case sSTART:
-        DEBUGRECV("hoping for start token...");
-        if (c == MESSAGE_START) {
-          DEBUGRECV("got it\n");
-          checksum = MESSAGE_START;
-          state = sSEQNUM;
-        } else
-          DEBUGRECV("sorry\n");
-        break;
+    	  STK500DEBUG("hoping for start token...");
+    	  if (c == MESSAGE_START) {
+    		  STK500DEBUG("got it");
+    		  checksum = MESSAGE_START;
+    		  state = sSEQNUM;
+    	  } else
+    		  STK500DEBUG("sorry");
+    	  break;
       case sSEQNUM:
-        DEBUGRECV("hoping for sequence...\n");
-        if (c == command_sequence) {
-          DEBUGRECV("got it, incrementing\n");
-          state = sSIZE1;
-          command_sequence++;
-        } else {
-          DEBUGRECV("sorry\n");
-          state = sSTART;
-        }
-        break;
+    	  STK500DEBUG("hoping for sequence...");
+    	  if (c == command_sequence) {
+    		  STK500DEBUG("got it, incrementing");
+    		  state = sSIZE1;
+    		  command_sequence++;
+    	  } else {
+    		  STK500DEBUG("sorry");
+    		  state = sSTART;
+    	  }
+    	  break;
       case sSIZE1:
-        DEBUGRECV("hoping for size LSB\n");
-        msglen = (unsigned)c * 256;
-        state = sSIZE2;
-        break;
+    	  STK500DEBUG("hoping for size LSB");
+    	  msglen = (unsigned)c * 256;
+    	  state = sSIZE2;
+    	  break;
       case sSIZE2:
-        DEBUGRECV("hoping for size MSB...");
-        msglen += (unsigned)c;
-        DEBUG(" msg is %u bytes\n",msglen);
-        state = sTOKEN;
-        break;
+    	  STK500DEBUG("hoping for size MSB...");
+    	  msglen += (unsigned)c;
+    	  PDEBUGS("\n");
+    	  PDEBUG(" msg is %u bytes",msglen);
+    	  state = sTOKEN;
+    	  break;
       case sTOKEN:
-        if (c == TOKEN) state = sDATA;
-        else state = sSTART;
-        break;
+    	  if (c == TOKEN) state = sDATA;
+    	  else state = sSTART;
+    	  break;
       case sDATA:
-        if (curlen < maxsize) {
-          msg[curlen] = c;
-        } else {
-          fprintf(stderr, "stk500v2_recv(): buffer too small, received %d byte into %u byte buffer\n",
-                  curlen,(unsigned int)maxsize);
-          return -2;
-        }
-        if ((curlen == 0) && (msg[0] == ANSWER_CKSUM_ERROR)) {
-          fprintf(stderr, "stk500v2_recv(): previous packet sent with wrong checksum\n");
-          return -3;
-        }
-        curlen++;
-        if (curlen == msglen) state = sCSUM;
-        break;
+    	  if (curlen < maxsize) {
+    		  msg[curlen] = c;
+    	  } else {
+    		  PDEBUGS("\n");
+    		  PDEBUG("buffer too small, received %d byte into %u byte buffer\n", curlen,(unsigned int)maxsize);
+    		  return -2;
+    	  }
+    	  if ((curlen == 0) && (msg[0] == ANSWER_CKSUM_ERROR)) {
+    		  PDEBUGS("\n");
+    		  PDEBUG("previous packet sent with wrong checksum\n");
+    		  return -3;
+    	  }
+    	  curlen++;
+    	  if (curlen == msglen) state = sCSUM;
+    	  break;
       case sCSUM:
-        if (checksum == 0) {
-          state = sDONE;
-        } else {
-          state = sSTART;
-          fprintf(stderr, "stk500v2_recv(): checksum error\n");
-          return -4;
-        }
-        break;
+    	  if (checksum == 0) {
+    		  state = sDONE;
+    	  } else {
+    		  state = sSTART;
+    		  PDEBUGS("\n");
+    		  PDEBUG("checksum error\n");
+    		  return -4;
+    	  }
+    	  break;
       default:
-        fprintf(stderr, "stk500v2_recv(): unknown state\n");
-        return -5;
+    	  PDEBUGS("\n");
+    	  PDEBUG("unknown state\n");
+    	  return -5;
      } /* switch */
 
      gettimeofday(&tv, NULL);
      tnow = tv.tv_sec;
      if (tnow-tstart > timeoutval) {			// wuff - signed/unsigned/overflow
-      timedout:
-       fprintf(stderr, "stk500v2_ReceiveMessage(): timeout\n");
-       return -1;
+    	 timedout:
+		 PDEBUGS("\n");
+		 PDEBUG("timeout\n");
+		 return -1;
      }
 
   } /* while */
-  DEBUG("\n");
+  PDEBUGS("\n");
 
   return (int)(msglen+6);
 }
@@ -409,23 +414,17 @@ int picport::stk500v2_recv( unsigned char *msg, size_t maxsize) {
 //*************************************+++++++++++++++++++++++++++++++++++******************************
 picport::picport (bool slow)  : addr (0), debug_on (0)
 {
-	unsigned char buf[14];
 	int ret,i;
 
   command_sequence = 1;
 
-  lbuf.ind = 0;
-  add_to_cmd_buf(NULL, 0, 1);//init
-
-  for (int i = 0; i < 16; ++i)
+  for (i = 0; i < 16; ++i)
     W [i] = 0;
 //  portname = new char [strlen (tty) + 1];
 //  strcpy (portname, tty);
 
-  int e;
-
-  if ((e = HwPort.avrdoper_open()) > 0) {
-    cerr << "Unable to open HW :" << strerror (e) << endl;
+  if ((ret = HwPort.avrdoper_open()) > 0) {
+    cerr << "Unable to open HW :" << strerror (ret) << endl;
     exit (EX_IOERR);
   }
 
@@ -436,48 +435,59 @@ picport::picport (bool slow)  : addr (0), debug_on (0)
 
   HwPort.avrdoper_drain();
 
-//  for(i=0;i<20;i++)
-  {
-  buf[0] = STK_CMD_PREPARE_PROGMODE_ISCP;
+  /*cmd_buf.buf[0] = STK_CMD_LEAVE_PROGMODE_ISCP;
+  ret = stk500v2_command( cmd_buf.buf, 1, sizeof(cmd_buf.buf));
+  usleep (500000);*/
+  cmd_buf.buf[0] = STK_CMD_PREPARE_PROGMODE_ISCP;
+  ret = stk500v2_command( cmd_buf.buf, 1, sizeof(cmd_buf.buf));
+
 //  buf[1] = 190;//lo 100
 //  buf[2] = 1;//hi 2
 
-//  cerr << "\n***********Send cmd *******";
-  ret = stk500v2_command(buf, 3, sizeof(buf));
-  sleep(1);
-  }
+  PDEBUG("Prepare programm mode:%d",ret);
+//  sleep(1);
+  cmd_buf.count = 0;
+  buf_send();//init
+
   if(ret > 0){//ok
 	  inPrgMode = 1;
 	  //setup
-//	  buf[0] = 1;//toCMD(c_nop);
-	  buf[0] = toCMD(c_set_param);
-	  buf[1] = toCMD(p_param_clock_delay);
-	  buf[2] = 1;
+	  add_to_buf(c_VDDon, IS_CMD);
 
-//	  buf[3] = toCMD(c_HVReset_ENABLE);
-	  //buf[3] = toCMD(c_HVReset_TO_RESET);
+	  add_to_buf(c_set_param, IS_CMD);
+	  add_to_buf(p_param_clock_delay, IS_DATA);
+	  add_to_buf(0, IS_DATA);
+	  
+	  add_to_buf(c_DelayMs, IS_CMD);
+	  add_to_buf(250, IS_DATA);
 
-	  buf[3] = toCMD(c_HVReset_TO_HV);
+	  add_to_buf(c_HVReset_ENABLE, IS_CMD);
+	  add_to_buf(c_HVReset_TO_RESET, IS_CMD);
 
-	  buf[4] = toCMD(c_DelayMs);
-  	  buf[5] = 100;
+	  add_to_buf(c_DelayMs, IS_CMD);
+	  add_to_buf(10, IS_DATA);
 
-	  buf[6] = toCMD(c_VDDon);
+	  add_to_buf(c_enablePGC_D, IS_CMD);
+	  add_to_buf(c_PGClow, IS_CMD);
+	  add_to_buf(c_PGDlow, IS_CMD);
 
-/*	  buf[10] = toCMD(c_HVReset_TO_HV);
+	  add_to_buf(c_DelayMs, IS_CMD);
+	  add_to_buf(250, IS_DATA);
 
-	  buf[8] = toCMD(c_DelayMs);
-	  buf[9] = 100;
-*/
-	  add_to_cmd_buf(buf,7,0);
-	  add_to_cmd_buf(NULL, 0, 1);//execute
+	  add_to_buf(c_HVReset_TO_HV, IS_CMD);
+
+	  add_to_buf(c_DelayMs, IS_CMD);
+	  add_to_buf(250, IS_DATA);
+	  ret = buf_send();
+	  PDEBUG("Config programm mode:%d",ret);
   }
   else
 	  inPrgMode = 0;
 //  fprintf(stderr,"\n ret=%d\n",ret);
 
-  sleep(1);
-
+//  sleep(1);
+usleep (500000);
+//	  exit(0);
  /*   if (reboot) {
       // Power off any microcontroller that may be running a program.
       cerr << "Power off." << endl;
@@ -508,30 +518,58 @@ picport::~picport ()
 	stk500v2_command(buf, 1, sizeof(buf));
 }
 
-int picport::add_to_cmd_buf(unsigned char * buf, size_t len, unsigned char flush)
+int picport::buf_send(void)
 {
-	int ret = 0;
-/*
-	if(flush) return 0;
-	lbuf.buf[0] = STK_CMD_RUN_ISCP;
-	memcpy(&(lbuf.buf[1]), buf, len);
-	lbuf.ind = len+1;
-	return stk500v2_command( lbuf.buf, lbuf.ind, sizeof(lbuf.buf));
-*/
-	if((lbuf.ind + len) > LBUFCMDMAX || flush){
-		if(lbuf.ind > 1){
-			lbuf.buf[lbuf.ind] = 0;//nop
-			lbuf.ind++;
-			ret = stk500v2_command( lbuf.buf, lbuf.ind, sizeof(lbuf.buf));
+	int ret = ERR(ERROR_NO_DATA);
+
+	if(cmd_buf.count > 1){
+		cmd_buf.buf[cmd_buf.count] = 0;//nop
+		cmd_buf.count++;
+		ret = stk500v2_command( cmd_buf.buf, cmd_buf.count, sizeof(cmd_buf.buf));
+
+	}
+
+	cmd_buf.last_cmd_ind = 1;
+	cmd_buf.count = 1;
+	cmd_buf.buf[0] = STK_CMD_RUN_ISCP;
+
+	PDEBUG("count:%d ret:%d",cmd_buf.count,ret);
+
+	return ret;
+}
+
+int picport::add_to_buf(unsigned char byte, Bool IsData, Bool AutoSend)
+{
+	int ret = NO_ERROR, len,i;
+
+	if(cmd_buf.count >= (LBUFCMDMAX - 1)){
+		PDEBUG("Buf ovf, byte:0x%02x count:%d AutoSend:%d",byte,cmd_buf.count,AutoSend);
+		if(AutoSend){
+			if(IsData){
+				len = cmd_buf.count - cmd_buf.last_cmd_ind;
+				memcpy(&(cmd_buf.temp_buf), &(cmd_buf.buf[cmd_buf.last_cmd_ind]), len);
+				cmd_buf.count = cmd_buf.last_cmd_ind;
+			}
+
+			ret = buf_send();
+
+			if(IsData){
+				memcpy(&(cmd_buf.buf[1]), &(cmd_buf.temp_buf), len);
+				cmd_buf.count += len;
+			}
 		}
-		lbuf.ind = 1;
-		lbuf.buf[0] = STK_CMD_RUN_ISCP;
-//		ret = 1;
+		else
+			return ERR(ERROR_OVF);
 	}
-	if(len > 0){
-		memcpy(&(lbuf.buf[lbuf.ind]), buf, len);
-		lbuf.ind += len;
+
+	cmd_buf.buf[cmd_buf.count] = byte;
+	if(!IsData){
+		cmd_buf.last_cmd_ind = cmd_buf.count;
 	}
+	cmd_buf.count++;
+
+//	PDEBUG("count:%d  cmd_ind:%d",cmd_buf.count,cmd_buf.last_cmd_ind);
+
 	return ret;
 }
 
@@ -544,116 +582,94 @@ void picport::reset (unsigned long reset_address)
   set_vpp (1);
   delay(10);
   addr = reset_address;
-  add_to_cmd_buf(NULL, 0, 1);//execute
+  buf_send();
 }
 
 int picport::send_n_bits(unsigned char cnt, unsigned int var)
 {
-	unsigned char buf[7], i;
+//	int ret;
 
-	DEBUG("--Send %d bits:%X\n",cnt,var);
-	i=2;
-	buf[0] = toCMD(c_pic_send);
-	buf[1] = cnt;
+	PDEBUG("--Send %d bits:%X",cnt,var);
 
-	if(cnt>24){// 32;
-		buf[i] = (unsigned char)((var>>24)&0xff);
-		i++;
+	add_to_buf(c_pic_send, IS_CMD);
+	add_to_buf(cnt, IS_DATA);
+	add_to_buf((unsigned char)(var&0xff), IS_DATA);
+
+	if(cnt>8){// 16;
+		add_to_buf((unsigned char)((var>>8)&0xff), IS_DATA);
 	}
 	if(cnt>16){// 24;
-		buf[i] = (unsigned char)((var>>16)&0xff);
-		i++;
+		add_to_buf((unsigned char)((var>>16)&0xff), IS_DATA);
 	}
-	if(cnt>8){// 16;
-		buf[i] = (unsigned char)((var>>8)&0xff);
-		i++;
+	if(cnt>24){// 32;
+		add_to_buf((unsigned char)((var>>24)&0xff), IS_DATA);
 	}
-	buf[i] = (unsigned char)(var&0xff);
-	i++;
-
-	return add_to_cmd_buf(buf,i,0);
+	
+	return NO_ERROR;//TODO
 }
 
-int picport::read_n_bits(unsigned char mode, unsigned char exec)
+int picport::read_n_bits(unsigned char mode, Bool exec)
 {
-	unsigned char buf[2];
-	int ret;
+	int ret=NO_ERROR;
 //usleep(100000);
 	switch(mode){
 	case 8:
-		buf[0] = toCMD(c_pic_read_byte2);
+		add_to_buf(c_pic_read_byte2, IS_CMD);
 		break;
 	case 14:
-		buf[0] = toCMD(c_pic_read_14_bits);
+		add_to_buf(c_pic_read_14_bits, IS_CMD);
 		break;
 	case 16:
-		buf[0] = toCMD(c_dspic_read_16_bits);
+		add_to_buf(c_dspic_read_16_bits, IS_CMD);
 		break;
 	}
-	ret = add_to_cmd_buf(buf,1,0);
 
 	if(exec){
-		add_to_cmd_buf(NULL, 0, 1);//execute
-		ret = lbuf.buf[3]<<8 |lbuf.buf[2];//(int)((uint16_t *)&lbuf.buf[2]);
+		buf_send();
+		ret = cmd_buf.buf[3]<<8 |cmd_buf.buf[2];//(int)((uint16_t *)&lbuf.buf[2]);
 	}
 
-	DEBUG("--Read %d mode, ret=%X\n",mode,ret);
+	PDEBUG("--Read %d mode, ret=%X",mode,ret);
 	return ret;
+
 }
 
-uint16_t *picport::execute()
+uint16_t *picport::execute() //TODO
 {
 	int ret;
+	ret = buf_send();
+	PDEBUG("--Execute, ret=%d",ret);
 
-	ret = add_to_cmd_buf(NULL, 0, 1);//execute
-	DEBUG("--Execute, ret=%d\n",ret);
-
-	return (uint16_t *)&lbuf.buf[2];
+	return (uint16_t *)&cmd_buf.buf[2];
 }
 
-/*
-void picport::p_out (int b)
-{
-	cerr << "\n***********p_out *******";
-}
-
-int picport::p_in ()
-{
-	cerr << "\n***********p_in *******";
-}
-*/
 void picport::set_clock_data (int clk, int dt)
 {
-	unsigned char buf[3];
 
-	DEBUG("--Set clock data %d:%d bytes\n",clk,dt);
+	PDEBUG("--Set clock data %d:%d bytes",clk,dt);
 	if(clk)
-		buf[0] = toCMD(c_PGChigh);
+		add_to_buf(c_PGChigh, IS_CMD);
 	else
-		buf[0] = toCMD(c_PGClow);
+		add_to_buf(c_PGClow, IS_CMD);
 	if(dt)
-		buf[1] = toCMD(c_PGDhigh);
+		add_to_buf(c_PGDhigh, IS_CMD);
 	else
-		buf[1] = toCMD(c_PGDlow);
+		add_to_buf(c_PGDlow, IS_CMD);
 
-	add_to_cmd_buf(buf,2,0);
 }
 
 void picport::set_vpp (int vpp)
 {
-	unsigned char buf[2];
 
 	if(vpp == 0)
-		buf[0] = toCMD(c_HVReset_TO_RESET);
+		add_to_buf(c_HVReset_TO_RESET, IS_CMD);
 	else
-		buf[0] = toCMD(c_HVReset_TO_HV);
+		add_to_buf(c_HVReset_TO_HV, IS_CMD);
 
-	add_to_cmd_buf(buf,1,0);
 }
 
 void picport::delay (unsigned int us)
 {
-	unsigned char buf[3];
 
 /*
 		usleep(us);
@@ -662,21 +678,21 @@ void picport::delay (unsigned int us)
 */
 	if(us < 600){
 		if(us<5) us = 5;
-		buf[0] = toCMD(c_DelayUs);
-		buf[1] = (us+3) / 5;
+		add_to_buf(c_DelayUs, IS_CMD);
+		add_to_buf((us+3) / 5, IS_DATA);
 	}else{
-		buf[0] = toCMD(c_DelayMs);
+		add_to_buf(c_DelayMs, IS_CMD);
 		if(us <= 1000)
-			buf[1] = 1;
+			add_to_buf(1, IS_DATA);
 		else if(us < (250*1000))
-			buf[1] = (us+500)/1000;
+			add_to_buf((us+500)/1000, IS_DATA);
 		else
-			buf[1] = 250;
+			add_to_buf(250, IS_DATA);
 	}
-	add_to_cmd_buf(buf,2,0);
+
 }
 
-int picport::command18 (enum commands18 comm, int data, unsigned char exec)
+int picport::command18 (enum commands18 comm, int data, Bool exec)
 {
 	int i, shift = comm;
 
@@ -764,7 +780,7 @@ int picport::command18 (enum commands18 comm, int data, unsigned char exec)
 	return shift;
 }
 
-int picport::command30 (enum commands30 comm, int data, unsigned char exec)
+int picport::command30 (enum commands30 comm, int data, Bool exec)
 {
   int i, shift;
 //  for (i = 0; i < 4; i++)
@@ -836,7 +852,7 @@ void picport::setaddress30 (unsigned long a)
 
 // -1 == error, no programmer present
 
-int picport::command (enum commands comm, int data, unsigned char exec)
+int picport::command (enum commands comm, int data, Bool exec)
 {
   int tmp1, tmp2;
 

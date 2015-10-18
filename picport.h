@@ -40,12 +40,32 @@ make sure your email passes my spam filtering.
 
 #define LBUFCMDMAX 250
 
+#define ERR(X)	-X
+
+typedef enum {
+	False=0,
+	True=1,
+} Bool;
+
+#define	IS_CMD	False
+#define	IS_DATA	True
+#define	AUTOSEND	True
+
 class picport {
 
 
 public:
 
   void delay (unsigned int us);
+
+  enum{
+	  NO_ERROR=0,
+	  ERROR=1,
+	  ERROR_NO_DATA=5,
+	  ERROR_OVF=10,
+	  ERROR_SEND=20,
+	  ERROR_RCV=25,
+  };
 
   enum commands {
     load_conf = 0, data_for_prog = 2, data_from_prog = 4,
@@ -79,13 +99,14 @@ public:
     REGOUT = 1,
   };
 
+
   picport ( bool slow);
 
   ~picport ();
 
-  int command (enum commands comm, int data = 0, unsigned char exec = 1);
-  int command18 (enum commands18 comm, int data = 0, unsigned char exec = 1);
-  int command30 (enum commands30 comm, int data = 0, unsigned char exec = 1);
+  int command (enum commands comm, int data = 0, Bool exec = True);
+  int command18 (enum commands18 comm, int data = 0, Bool exec = True);
+  int command30 (enum commands30 comm, int data = 0, Bool exec = True);
   void setaddress (unsigned long a);
   void setaddress30 (unsigned long a);
 
@@ -119,25 +140,30 @@ private:
   int stk500v2_send(unsigned char * data, size_t len);
   int stk500v2_recv(unsigned char *msg, size_t maxsize);
 
-  int add_to_cmd_buf(unsigned char * buf, size_t len, unsigned char flush);
+  int buf_send(void);
+  int add_to_buf(unsigned char byte, Bool IsCmd, Bool AutoSend=AUTOSEND);
   int send_n_bits(unsigned char cnt, unsigned int var);
-  int read_n_bits(unsigned char mode, unsigned char exec);
+  int read_n_bits(unsigned char mode, Bool exec);
 
   struct lbuf_s{
-	  unsigned char ind;
+	  unsigned char count;
+	  unsigned char last_cmd_ind;
 	  unsigned char buf[LBUFCMDMAX];
+	  unsigned char temp_buf[LBUFCMDMAX];
   };
 
-  struct lbuf_s lbuf;
+  struct lbuf_s cmd_buf;
 
 };
 
 #if 0
-#define DEBUG(...) fprintf(stderr, __VA_ARGS__)
-#define DEBUGRECV(...) fprintf(stderr, __VA_ARGS__)
+#define PDEBUGS(...) fprintf(stderr, __VA_ARGS__)
+#define	PDEBUG(fmt, args...)	fprintf(stderr,"DBG:%s - " fmt "\n",__func__, ##args)
+#define	STK500DEBUG(...)
 #else
-#define DEBUG(...)
-#define DEBUGRECV(...)
+#define	STK500DEBUG(...)
+#define PDEBUG(...)
+#define PDEBUGS(...)
 #endif
 
 

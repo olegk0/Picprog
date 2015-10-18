@@ -912,7 +912,7 @@ hexfile::program_location (picport& pic, unsigned long addr, short word, bool is
 
 
   if (-1 == word
-      || (retval = pic.command (isdata ? picport::data_from_data	: picport::data_from_prog ,0,1)) == word)
+      || (retval = pic.command (isdata ? picport::data_from_data	: picport::data_from_prog ,0, True)) == word)
     return NOT_PROGRAMMED;
 
   if (-1 == retval) {
@@ -967,9 +967,9 @@ hexfile::program_location (picport& pic, unsigned long addr, short word, bool is
 
   // verify, but do not verify fuses if Code Protect bit is cleared!
 
-  int read_val = pic.command (isdata ? picport::data_from_data : picport::data_from_prog,0,1);
+  int read_val = pic.command (isdata ? picport::data_from_data : picport::data_from_prog,0, True);
   if (word != read_val)
-  if (word != (read_val = pic.command (isdata ? picport::data_from_data : picport::data_from_prog,0,1) )) {
+  if (word != (read_val = pic.command (isdata ? picport::data_from_data : picport::data_from_prog,0, True) )) {
     cerr << pic.port() << ':' << hex << setw (4) << setfill ('0') << addr
 	 << ": programmed=" << setw (4) << setfill ('0') << word
 	 << ", read=" << setw (4) << setfill ('0') << read_val
@@ -1183,7 +1183,7 @@ hexfile::program (picport &pic, bool reset, bool nopreserve)
 	if (pic.address () >= deviceinfo [dev].prog_size - deviceinfo [dev].prog_preserved
 	    && pic.address () < deviceinfo [dev].prog_size) {
 
-		int value = pic.command (picport::data_from_prog,0,1);
+		int value = pic.command (picport::data_from_prog,0, True);
 	  if (-1 == value) {
 	    cerr << pic.port() << ':'
 		 << hex << setfill ('0') << setw (4) << pic.address () << dec
@@ -1208,7 +1208,7 @@ hexfile::program (picport &pic, bool reset, bool nopreserve)
 	for (;;) {
 	  if (pic.address () == deviceinfo [dev].prog_size + 4) {
 
-		  int value = pic.command (picport::data_from_prog,0,1);
+		  int value = pic.command (picport::data_from_prog,0, True);
 	    if (-1 == value) {
 	      cerr << pic.port() << ':'
 		   << hex << setfill ('0') << setw (4) << pic.address () << dec
@@ -1242,7 +1242,7 @@ hexfile::program (picport &pic, bool reset, bool nopreserve)
       assert (0x2007 == pic.address());
       int value;
 
-      if (-1 == (value = pic.command (picport::data_from_prog,0,1))) {
+      if (-1 == (value = pic.command (picport::data_from_prog,0, True))) {
 	cerr << pic.port() << ':' << hex << setfill ('0') << setw (4) << pic.address () << dec
 	     << ":unable to read pic calibration bits" << endl;
 	return EX_IOERR;
@@ -1288,7 +1288,7 @@ hexfile::program (picport &pic, bool reset, bool nopreserve)
   if (rom == deviceinfo [dev].prog_type || 0 == deviceinfo [dev].prog_size) {
     cout << "Skipped burning program memory," << endl;
   } else {
-    cout << "Burning program memory," << flush;
+    cout << "Burning program memory,\n" << flush;
     count = 0;
 
     if (16 == deviceinfo [dev].prog_bits) {
@@ -1336,8 +1336,9 @@ hexfile::program (picport &pic, bool reset, bool nopreserve)
 	cerr << "Exiting." << endl;
 	return EX_UNAVAILABLE;
       }
+      cout << count << "\r" << flush;
     }
-    cout << " " << count << " location" << (count != 1 ? "s" : "") << "," << endl;
+    cout << "\r " << count << " location" << (count != 1 ? "s" : "") << "," << endl;
   }
 
   if (rom == deviceinfo [dev].data_type || 0 == deviceinfo [dev].data_size) {
@@ -1595,17 +1596,17 @@ hexfile::read_code (picport &pic, short *pgmp, unsigned long addr, unsigned long
     }
 
     if (16 == deviceinfo [dev].prog_bits) {
-    	pic.command18 (picport::tread_inc,0,0);
+    	pic.command18 (picport::tread_inc,0, False);
 //      pgmp [i] = *pic.execute();
     }
     else if (12 == deviceinfo [dev].prog_bits) {
-    	pic.command (picport::data_from_prog,0,0);
+    	pic.command (picport::data_from_prog,0, False);
 //      pgmp [i] = *pic.execute() & 0xfff;
-      pic.command (picport::inc_addr, addr_max,0);
+      pic.command (picport::inc_addr, addr_max, False);
     } else { // 14 bit
-    	pic.command (picport::data_from_prog,0,0);
+    	pic.command (picport::data_from_prog,0, False);
 //     pgmp [i] = *pic.execute();
-      pic.command (picport::inc_addr,0,0);
+      pic.command (picport::inc_addr,0, False);
     }
     c++;
 
